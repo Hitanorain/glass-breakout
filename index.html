@@ -44,7 +44,7 @@ button:focus-visible{outline:2px solid var(--mint);outline-offset:3px}
 #bar button{width:40px;height:40px;padding:0;border:0;border-radius:10px;background:transparent;display:grid;place-items:center;letter-spacing:0}
 #bar button:hover{background:rgba(200,215,255,.14)}
 #bar svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
-#muteBtn .off{display:none}#muteBtn.muted .on{display:none}#muteBtn.muted .off{display:inline}
+#bar .off{display:none}#bar .muted .on{display:none}#bar .muted .off{display:inline}#bar .muted{opacity:.6}
 body.menu #pauseBtn{visibility:hidden}
 /* overlays */
 .ov{position:fixed;inset:0;display:grid;place-items:center;z-index:8;
@@ -106,7 +106,8 @@ h2{margin:0;font-family:var(--display);font-weight:900;font-size:32px;letter-spa
 
 <div id="bar">
  <button id="pauseBtn" type="button" title="暂停 (P)" aria-label="暂停"><svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg></button>
- <button id="muteBtn" type="button" title="声音 (M)" aria-label="声音开关"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path class="on" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/><path class="off" d="M17 9l5 6M22 9l-5 6"/></svg></button>
+ <button id="musicBtn" type="button" title="音乐 (B)" aria-label="背景音乐开关"><svg viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/><path class="off" d="M3 3l18 18"/></svg></button>
+ <button id="muteBtn" type="button" title="音效 (M)" aria-label="音效开关"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path class="on" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/><path class="off" d="M17 9l5 6M22 9l-5 6"/></svg></button>
 </div>
 
 <div id="ovTitle" class="ov">
@@ -115,6 +116,7 @@ h2{margin:0;font-family:var(--display);font-weight:900;font-size:32px;letter-spa
   <h1>琉璃打砖块</h1>
   <p class="lead">左右移动球拍，把星光球弹回去，敲碎夜空里所有的琉璃砖。不同颜色的砖块脾气不同，有的要多打几下，有的会爆炸，有的会掉道具。砖块还有五种风格：星夜、春樱、秋叶、冬雪、糖果。</p>
   <button id="startBtn" class="big" type="button">开始游戏</button>
+  <button id="freshBtn" type="button" hidden>从第 1 关开始</button>
   <p class="bestline">最高分 <b id="bestTitle">0</b></p>
   <div class="styles">
    <p class="styles-label">砖块风格</p>
@@ -124,7 +126,7 @@ h2{margin:0;font-family:var(--display);font-weight:900;font-size:32px;letter-spa
    <div><h3>砖块</h3><ul id="lgBricks"></ul></div>
    <div><h3>道具</h3><ul id="lgPU"></ul></div>
   </div>
-  <p class="keys">电脑：鼠标或 <kbd>←</kbd><kbd>→</kbd> 移动，<kbd>空格</kbd> 或点击发球，<kbd>P</kbd> 暂停，<kbd>M</kbd> 静音<br>iPad / 手机：手指在屏幕上左右滑动，轻点发球</p>
+  <p class="keys">电脑：鼠标或 <kbd>←</kbd><kbd>→</kbd> 移动，<kbd>空格</kbd> 或点击发球，<kbd>P</kbd> 暂停，<kbd>B</kbd> 音乐，<kbd>M</kbd> 音效<br>iPad / 手机：手指在屏幕上左右滑动，轻点发球</p>
  </div>
 </div>
 
@@ -132,7 +134,7 @@ h2{margin:0;font-family:var(--display);font-weight:900;font-size:32px;letter-spa
  <div class="card">
   <h2>已暂停</h2>
   <button id="resumeBtn" class="big" type="button">继续</button>
-  <div class="row"><button id="restartBtn" type="button">重新开始</button><button id="homeBtn1" type="button">回到主页</button></div>
+  <div class="row"><button id="restartBtn" type="button">重来这一关</button><button id="homeBtn1" type="button">回到主页</button></div>
  </div>
 </div>
 
@@ -157,8 +159,8 @@ h2{margin:0;font-family:var(--display);font-weight:900;font-size:32px;letter-spa
    <div class="stat"><span>到达关卡</span><b id="overLevel">1</b></div>
    <div class="stat"><span>最高分</span><b id="overBest">0</b></div>
   </div>
-  <button id="againBtn" class="big" type="button">再来一局</button>
-  <button id="homeBtn2" type="button">回到主页</button>
+  <button id="againBtn" class="big" type="button">从这一关重来</button>
+  <div class="row"><button id="freshBtn2" type="button">从第 1 关开始</button><button id="homeBtn2" type="button">回到主页</button></div>
  </div>
 </div>
 
@@ -325,9 +327,13 @@ function tone(f, dur, type = 'sine', vol = .25, slide = 0, delay = 0) {
   o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + .03);
 }
 let noiseBuf = null;
+function getNoise() {
+  if (!noiseBuf) { noiseBuf = AC.createBuffer(1, AC.sampleRate, AC.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+  return noiseBuf;
+}
 function noise(dur, vol, f0, f1, type = 'lowpass') {
   if (!AC || muted || state === 'title') return;
-  if (!noiseBuf) { noiseBuf = AC.createBuffer(1, AC.sampleRate, AC.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+  getNoise();
   const t = AC.currentTime, s = AC.createBufferSource(), fl = AC.createBiquadFilter(), g = AC.createGain();
   s.buffer = noiseBuf; fl.type = type; fl.frequency.setValueAtTime(f0, t); fl.frequency.exponentialRampToValueAtTime(f1, t + dur);
   g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
@@ -1123,6 +1129,162 @@ function paintDecor2D(g, th, w, h, v) {
   g.restore();
 }
 
+/* ================= background music (synthesised live, one original piece per style) =================
+   Each song: 8 bars of eighth notes. Melody tokens are scale degrees: 1-7, ' = octave up, , = octave down,
+   - = hold, . = rest. prog = chord root degree per bar (diatonic seventh chords). */
+const MAJOR = [0, 2, 4, 5, 7, 9, 11], MINOR = [0, 2, 3, 5, 7, 8, 10];
+const SONGS = {
+  glass: { bpm: 76, root: 62, scale: MAJOR, prog: [1, 6, 4, 5, 1, 3, 4, 1], lead: 'bell', arp: 'bell', pad: .9, bass: 'long', drums: 'none',
+    mel: ['5 - - 3 - - 2 1', '3 - - - - . 1 2', '3 - - 4 - - 3 2', '2 - - - - . . .', '5 - - 3 - - 2 1', "7, - - 1 - 2 3 -", '4 - 3 - 2 - 1 -', '1 - - - - . . .'] },
+  spring: { bpm: 104, root: 67, scale: MAJOR, prog: [1, 5, 6, 4, 1, 5, 4, 1], lead: 'pluck', arp: 'pluck', pad: .45, bass: 'quarter', drums: 'shaker',
+    mel: ['1 2 3 5 - 3 2 .', '2 3 5 6 - 5 3 .', '6 - 5 3 2 - 3 5', '5 - - - 3 . 2 .', '1 2 3 5 - 6 5 3', '2 - 3 - 5 - 6 5', '6 5 3 2 1 - 2 3', '1 - - - - . . .'] },
+  autumn: { bpm: 86, root: 57, scale: MINOR, prog: [1, 6, 3, 7, 4, 1, 7, 1], lead: 'flute', arp: 'guitar', pad: .6, bass: 'long', drums: 'brush',
+    mel: ['1 - 3 - 5 - 4 3', '3 - - 1 - - . .', "3 - 5 - 1' - 7 5", '7 - - 5 - - . .', '6 - 5 - 4 - 3 4', '5 - - 3 - 1 - .', '2 - 3 - 4 - 7, 2', '1 - - - - . . .'] },
+  snow: { bpm: 92, root: 64, scale: MAJOR, prog: [1, 6, 4, 5, 1, 4, 5, 1], lead: 'box', arp: 'box', pad: .7, bass: 'long', drums: 'sleigh',
+    mel: ["5 - 3 - 1' - 7 6", '5 - - - 3 - . .', "4 - 6 - 1' - 6 4", '3 - - - 2 - . .', "5 - 3 - 1' - 7 6", "5 - - 6 7 - 1' -", "2' - 1' - 7 - 6 7", "1' - - - - . . ."] },
+  candy: { bpm: 118, root: 65, scale: MAJOR, prog: [1, 6, 4, 5, 1, 6, 2, 1], lead: 'square', arp: 'none', pad: .35, bass: 'bounce', drums: 'pop',
+    mel: ['1 . 3 . 5 . 3 5', '6 . 5 . 3 - . .', "4 . 6 . 1' . 6 4", '5 - . 3 5 - . .', '1 . 3 . 5 . 6 5', "1' . 7 . 6 - 5 .", '4 . 6 . 5 . 2 3', "1 - . . 1' . . ."] },
+};
+for (const s of Object.values(SONGS)) {
+  s.notes = s.mel.map(bar => bar.trim().split(/\s+/).map(tok => {
+    if (tok === '-' || tok === '.') return tok;
+    let d = parseInt(tok, 10) - 1;
+    for (const ch of tok.slice(1)) d += ch === "'" ? 7 : ch === ',' ? -7 : 0;
+    return d;
+  }));
+}
+const degMidi = (song, d, base) => { const o = Math.floor(d / 7), i = ((d % 7) + 7) % 7; return base + 12 * o + song.scale[i]; };
+const mf = m => 440 * Math.pow(2, (m - 69) / 12);
+
+let musicOn = store.get('music', true);
+const Music = {
+  bus: null, rev: null, song: null, id: null, pending: null, step: 0, nextT: 0, level: 0,
+  init() {
+    if (this.bus || !AC) return;
+    this.bus = AC.createGain(); this.bus.gain.value = 0; this.bus.connect(AC.destination);
+    // small generated hall for the melody instruments
+    const len = AC.sampleRate * 2.2, ir = AC.createBuffer(2, len, AC.sampleRate);
+    for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2); }
+    const conv = AC.createConvolver(); conv.buffer = ir;
+    this.rev = AC.createGain(); this.rev.gain.value = .42; this.rev.connect(conv); conv.connect(this.bus);
+  },
+  // called every frame: follows the style, the game state and the on/off switch
+  update() {
+    if (!AC) return;
+    this.init();
+    const want = !musicOn ? 0 : state === 'over' ? 0 : state === 'pause' ? .3 : state === 'clear' ? .45 : 1;
+    if (want !== this.level) { this.level = want; const g = this.bus.gain, t = AC.currentTime; g.cancelScheduledValues(t); g.setTargetAtTime(want * .38, t, want > 0 ? .25 : .18); }
+    if (want === 0 && state === 'over') { this.song = null; this.id = null; return; }
+    if (!musicOn) return;
+    const id = THEMES[theme] ? theme : 'glass';
+    if (!this.song) { this.id = id; this.song = SONGS[id]; this.step = 0; this.nextT = AC.currentTime + .08; }
+    else if (id !== this.id) this.pending = id;
+    if (this.nextT < AC.currentTime - .15) this.nextT = AC.currentTime + .05;   // tab was hidden: don't burst-play the backlog
+    while (this.nextT < AC.currentTime + .25) {
+      if (this.pending && this.step % 8 === 0) { this.id = this.pending; this.song = SONGS[this.id]; this.pending = null; this.step = 0; }
+      this.play(this.step, this.nextT);
+      this.nextT += 30 / this.song.bpm; this.step++;
+    }
+  },
+  play(s, t) {
+    const S = this.song, e = 30 / S.bpm, bar = (s >> 3) % 8, i = s & 7, pass = (s >> 6) & 1;
+    const r = S.prog[bar] - 1, chord = [r, r + 2, r + 4, r + 6];
+    // pad
+    if (i === 0 && S.pad) this.pad(chord.map(d => mf(degMidi(S, d, S.root - 12 + (r > 3 ? -12 : 0) + 12))), t, e * 8, .05 * S.pad);
+    // bass
+    const bm = degMidi(S, r, S.root - 24) - (r > 4 ? 12 : 0);
+    if (S.bass === 'long' && (i === 0 || i === 4)) this.bass(mf(i === 0 ? bm : bm + 7), t, e * 3.6, .2);
+    if (S.bass === 'quarter' && i % 2 === 0) this.bass(mf(i % 4 === 0 ? bm : bm + 7), t, e * 1.6, .18);
+    if (S.bass === 'bounce') this.bass(mf(i % 2 === 0 ? bm : bm + 12), t, e * .7, .16);
+    // arpeggio
+    const ord = [0, 1, 2, 3, 2, 1, 2, 1], tone = d => mf(degMidi(S, d, S.root));
+    if (S.arp === 'bell') this.bell(tone(chord[ord[i]] + 7), t, e * 2, .035, 'sine');
+    if (S.arp === 'pluck' && i % 2 === 1) this.pluck(tone(chord[[0, 2, 1, 3][(i >> 1)]] + 7), t, .05);
+    if (S.arp === 'guitar') this.pluck(tone(chord[[0, 2, 1, 2, 3, 2, 1, 2][i]]), t, .045, 900);
+    if (S.arp === 'box' && i % 2 === 0) this.bell(tone(chord[[0, 1, 2, 3][i >> 1]] + 14), t, e * 2, .03, 'box');
+    // melody (second time round: an octave up, or with a harmony a third below)
+    const n = S.notes[bar][i];
+    if (typeof n === 'number') {
+      let len = 1; while (i + len < 8 && S.notes[bar][i + len] === '-') len++;
+      const up = pass && (S.lead === 'bell' || S.lead === 'box') ? 12 : 0, f = mf(degMidi(S, n, S.root + 12) + up), dur = len * e;
+      this.lead(S.lead, f, t, dur);
+      if (pass && !up) this.lead(S.lead, mf(degMidi(S, n - 2, S.root + 12)), t, dur, .5);
+    }
+    // drums
+    if (S.drums === 'shaker') { this.hat(t, i % 2 ? .05 : .025, 6000); if (i === 0 || i === 4) this.kick(t, .3); }
+    if (S.drums === 'brush') { if (i % 2 === 1) this.hat(t, .035, 4500, .09); if (i === 0) this.kick(t, .25); if (i === 4) this.clap(t, .06); }
+    if (S.drums === 'sleigh') { this.hat(t, i % 2 ? .02 : .04, 9000, .05); if (i % 4 === 2) { this.hat(t, .03, 9000, .05); this.hat(t + e / 2, .025, 9000, .05); } }
+    if (S.drums === 'pop') { if (i === 0 || i === 4) this.kick(t, .38); if (i === 2 || i === 6) this.clap(t, .14); this.hat(t + e / 2, .03, 7000); }
+  },
+  // ---- voices ----
+  env(g, t, a, peak, d) { g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(.0001, t + a + d); },
+  out(node, wet) { node.connect(this.bus); if (wet) { const s = AC.createGain(); s.gain.value = wet; node.connect(s); s.connect(this.rev); } },
+  osc(type, f, t, stop) { const o = AC.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t); o.start(t); o.stop(stop); return o; },
+  pad(fs, t, dur, vol) {
+    const g = AC.createGain(), lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .5); g.gain.setValueAtTime(vol, t + dur - .2); g.gain.exponentialRampToValueAtTime(.0001, t + dur + .6);
+    for (const f of fs) for (const dt of [-6, 6]) { const o = this.osc('sawtooth', f, t, t + dur + .7); o.detune.value = dt; o.connect(lp); }
+    lp.connect(g); this.out(g, .5);
+  },
+  bass(f, t, dur, vol) {
+    const g = AC.createGain(), lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .02); g.gain.setTargetAtTime(.0001, t + dur * .6, dur * .25);
+    this.osc('triangle', f, t, t + dur + .3).connect(lp); this.osc('sine', f, t, t + dur + .3).connect(lp);
+    lp.connect(g); this.out(g, 0);
+  },
+  bell(f, t, dur, vol, kind) {
+    const g = AC.createGain(), d = Math.max(.8, dur * 1.6);
+    this.env(g, t, .005, vol, d);
+    this.osc('sine', f, t, t + d + .05).connect(g);
+    const g2 = AC.createGain(); this.env(g2, t, .003, vol * (kind === 'box' ? .5 : .25), d * .35);
+    this.osc('sine', f * (kind === 'box' ? 3.01 : 4.02), t, t + d).connect(g2); g2.connect(g);
+    this.out(g, .55);
+  },
+  pluck(f, t, vol, cut = 2600) {
+    const g = AC.createGain(), lp = AC.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(cut * 1.6, t); lp.frequency.exponentialRampToValueAtTime(cut * .35, t + .35);
+    this.env(g, t, .004, vol, .55);
+    this.osc('triangle', f, t, t + .65).connect(lp); this.osc('sawtooth', f * 1.002, t, t + .65).connect(lp);
+    lp.connect(g); this.out(g, .3);
+  },
+  lead(kind, f, t, dur, k = 1) {
+    if (kind === 'bell' || kind === 'box') return this.bell(f, t, dur, .085 * k, kind);
+    if (kind === 'pluck') return this.pluck(f, t, .1 * k, 3200);
+    const g = AC.createGain(), lp = AC.createBiquadFilter(); lp.type = 'lowpass';
+    if (kind === 'flute') {
+      lp.frequency.value = 2400; const vol = .07 * k;
+      g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .06); g.gain.setValueAtTime(vol, t + Math.max(.07, dur - .08)); g.gain.exponentialRampToValueAtTime(.0001, t + dur + .2);
+      const o = this.osc('sine', f, t, t + dur + .25), o2 = this.osc('triangle', f * 2, t, t + dur + .25);
+      const lfo = this.osc('sine', 5.2, t, t + dur + .25), lg = AC.createGain(); lg.gain.value = f * .006; lfo.connect(lg); lg.connect(o.frequency);
+      const g2 = AC.createGain(); g2.gain.value = .12; o2.connect(g2); g2.connect(lp); o.connect(lp);
+      lp.connect(g); return this.out(g, .45);
+    }
+    // candy: bright, short square
+    lp.frequency.value = 2300; const vol = .045 * k, d = Math.min(dur, .22);
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .008); g.gain.setTargetAtTime(.0001, t + d * .7, .05);
+    this.osc('square', f, t, t + d + .3).connect(lp); lp.connect(g); this.out(g, .25);
+  },
+  noiseSrc(t, dur) { const s = AC.createBufferSource(); s.buffer = getNoise(); s.start(t, Math.random() * .5); s.stop(t + dur); return s; },
+  hat(t, vol, cut, dur = .045) {
+    const g = AC.createGain(), hp = AC.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = cut;
+    this.env(g, t, .002, vol, dur); this.noiseSrc(t, dur + .05).connect(hp); hp.connect(g); this.out(g, 0);
+  },
+  clap(t, vol) {
+    const g = AC.createGain(), bp = AC.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1500; bp.Q.value = .8;
+    this.env(g, t, .003, vol, .14); this.noiseSrc(t, .2).connect(bp); bp.connect(g); this.out(g, .2);
+  },
+  kick(t, vol) {
+    const g = AC.createGain(), o = this.osc('sine', 120, t, t + .3);
+    o.frequency.exponentialRampToValueAtTime(45, t + .16); this.env(g, t, .004, vol, .22); o.connect(g); this.out(g, 0);
+  },
+};
+function toggleMusic() {
+  musicOn = !musicOn; store.set('music', musicOn);
+  document.getElementById('musicBtn').classList.toggle('muted', !musicOn);
+  if (!musicOn && Music.bus) { Music.song = null; Music.id = null; }
+  audioInit();
+}
+
 /* ================= game state ================= */
 let state = 'title';      // title | serve | play | pause | clear | over
 let level = 1, score = 0, shownScore = 0, lives = 3, best = store.get('best', 0), combo = 0, ramp = 1;
@@ -1206,10 +1368,18 @@ function launch() {
   if (state === 'serve') state = 'play';
 }
 
-function startGame() {
+function resumeLevel() { return Math.max(1, store.get('resume', 1) | 0); }
+function updateStartButtons() {
+  const r = resumeLevel();
+  document.getElementById('startBtn').textContent = r > 1 ? `继续第 ${r} 关` : '开始游戏';
+  document.getElementById('freshBtn').hidden = r <= 1;
+}
+function startGame(from = 1) {
   audioInit();
   bestAtStart = best;
-  score = 0; shownScore = 0; lives = 3; level = 1; ramp = 1; combo = 0; maxCombo = 0;
+  from = Math.max(1, from | 0);
+  store.set('resume', from);
+  score = 0; shownScore = 0; lives = 3; level = from; ramp = 1; combo = 0; maxCombo = 0;
   resetFx();
   parts = [];
   state = 'serve';
@@ -1222,10 +1392,12 @@ function goHome() {
   state = 'title'; resetFx(); parts = [];
   loadLevel(1); serve();
   document.getElementById('bestTitle').textContent = best.toLocaleString();
+  updateStartButtons();
   showOverlay('ovTitle');
 }
 function nextLevel() {
   level++; ramp = 1; combo = 0; resetFx();
+  store.set('resume', level);
   loadLevel(level);
   state = 'serve'; serve();
   showOverlay(null);
@@ -1255,6 +1427,8 @@ function gameOver() {
     document.getElementById('overLevel').textContent = level;
     document.getElementById('overBest').textContent = best.toLocaleString();
     document.getElementById('overFlag').hidden = !isBest;
+    document.getElementById('againBtn').textContent = level > 1 ? `从第 ${level} 关重来` : '再来一局';
+    document.getElementById('freshBtn2').hidden = level <= 1;
     showOverlay('ovOver');
   }, 700);
 }
@@ -2042,16 +2216,19 @@ window.addEventListener('keydown', e => {
   if (e.repeat) return;
   audioInit();
   if (e.code === 'KeyM') { toggleMute(); return; }
+  if (e.code === 'KeyB') { toggleMusic(); return; }
   if (e.code === 'KeyP' || e.code === 'Escape') { if (state === 'pause') resumeGame(); else pauseGame(); return; }
   if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowUp') {
     const ae = document.activeElement;
     if (ae && ae.tagName === 'BUTTON' && ae.closest('.ov:not([hidden])') && e.code !== 'ArrowUp') return; // let the focused menu button handle it
-    if (state === 'title') startGame();
+    if (state === 'title') startGame(resumeLevel());
     else if (playing()) launch();
     else if (state === 'pause') resumeGame();
   }
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
+// browsers only allow sound after a gesture: the first tap anywhere (menus included) starts the audio
+window.addEventListener('pointerdown', () => audioInit(), { capture: true });
 window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; pauseGame(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
 
@@ -2060,21 +2237,26 @@ function toggleMute() {
   document.getElementById('muteBtn').classList.toggle('muted', muted);
 }
 document.getElementById('muteBtn').classList.toggle('muted', muted);
+document.getElementById('musicBtn').classList.toggle('muted', !musicOn);
+document.getElementById('musicBtn').addEventListener('click', e => { e.currentTarget.blur(); toggleMusic(); });
 document.getElementById('muteBtn').addEventListener('click', e => { audioInit(); toggleMute(); e.currentTarget.blur(); });
 document.getElementById('pauseBtn').addEventListener('click', e => { e.currentTarget.blur(); if (state === 'pause') resumeGame(); else pauseGame(); });
-document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('startBtn').addEventListener('click', () => startGame(resumeLevel()));
+document.getElementById('freshBtn').addEventListener('click', () => startGame(1));
+document.getElementById('freshBtn2').addEventListener('click', () => startGame(1));
 document.getElementById('resumeBtn').addEventListener('click', resumeGame);
-document.getElementById('restartBtn').addEventListener('click', startGame);
+document.getElementById('restartBtn').addEventListener('click', () => startGame(level));
 document.getElementById('homeBtn1').addEventListener('click', goHome);
 document.getElementById('homeBtn2').addEventListener('click', goHome);
 document.getElementById('nextBtn').addEventListener('click', () => { audioInit(); nextLevel(); });
-document.getElementById('againBtn').addEventListener('click', startGame);
+document.getElementById('againBtn').addEventListener('click', () => startGame(level));
 
 /* ================= boot ================= */
 window.addEventListener('resize', resize);
 resize();
 loadLevel(1); serve();
 document.getElementById('bestTitle').textContent = best.toLocaleString();
+updateStartButtons();
 buildLegend();
 buildStylePicker();
 initGL();
@@ -2094,6 +2276,7 @@ function frame(now) {
   const gdt = (state === 'pause' || hitStop > 0) ? 0 : dt;
   update(dt);
   draw(gdt);
+  Music.update();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
