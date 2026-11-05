@@ -46,6 +46,10 @@ button:focus-visible{outline:2px solid var(--mint);outline-offset:3px}
 #bar svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
 #bar .off{display:none}#bar .muted .on{display:none}#bar .muted .off{display:inline}#bar .muted{opacity:.6}
 body.menu #pauseBtn{visibility:hidden}
+/* 返回游戏厅 */
+a.lobby{font:inherit;color:var(--fg);text-decoration:none;border:1px solid var(--line);background:rgba(200,215,255,.08);border-radius:999px;padding:10px 22px;letter-spacing:.12em;touch-action:manipulation}
+a.lobby:hover{background:rgba(200,215,255,.16)}a.lobby:focus-visible{outline:2px solid var(--mint);outline-offset:3px}
+.card>a.lobby.top{align-self:flex-start;padding:6px 14px;font-size:13px;color:var(--dim);margin:-8px 0 -4px -6px}.card>a.lobby.top:hover{color:var(--fg)}
 /* overlays */
 .ov{position:fixed;inset:0;display:grid;place-items:center;z-index:8;
  padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));
@@ -112,6 +116,7 @@ h2{margin:0;font-family:var(--display);font-weight:900;font-size:32px;letter-spa
 
 <div id="ovTitle" class="ov">
  <div class="card wide">
+  <a class="lobby top" href="https://hitanorain.github.io/">← 返回游戏厅</a>
   <p class="eyebrow">Glass · Brick Breaker</p>
   <h1>琉璃打砖块</h1>
   <p class="lead">左右移动球拍，把星光球弹回去，敲碎夜空里所有的琉璃砖。不同颜色的砖块脾气不同，有的要多打几下，有的会爆炸，有的会掉道具。砖块还有五种风格：星夜、春樱、秋叶、冬雪、糖果。</p>
@@ -134,7 +139,7 @@ h2{margin:0;font-family:var(--display);font-weight:900;font-size:32px;letter-spa
  <div class="card">
   <h2>已暂停</h2>
   <button id="resumeBtn" class="big" type="button">继续</button>
-  <div class="row"><button id="restartBtn" type="button">重来这一关</button><button id="homeBtn1" type="button">回到主页</button></div>
+  <div class="row"><button id="restartBtn" type="button">重来这一关</button><button id="homeBtn1" type="button">回到主页</button><a class="lobby" href="https://hitanorain.github.io/">返回游戏厅</a></div>
  </div>
 </div>
 
@@ -160,7 +165,7 @@ h2{margin:0;font-family:var(--display);font-weight:900;font-size:32px;letter-spa
    <div class="stat"><span>最高分</span><b id="overBest">0</b></div>
   </div>
   <button id="againBtn" class="big" type="button">从这一关重来</button>
-  <div class="row"><button id="freshBtn2" type="button">从第 1 关开始</button><button id="homeBtn2" type="button">回到主页</button></div>
+  <div class="row"><button id="freshBtn2" type="button">从第 1 关开始</button><button id="homeBtn2" type="button">回到主页</button><a class="lobby" href="https://hitanorain.github.io/">返回游戏厅</a></div>
  </div>
 </div>
 
