@@ -79,6 +79,15 @@ h2{margin:0;font-family:var(--display);font-weight:900;font-size:32px;letter-spa
 .flag{font-size:13px;letter-spacing:.3em;color:#ffe08a;margin:0}
 .bestline{font-size:13px;color:var(--dim);margin:0;letter-spacing:.1em}
 .bestline b{color:#ffe08a;font-variant-numeric:tabular-nums}
+.styles{width:100%;display:flex;flex-direction:column;align-items:center;gap:8px}
+.styles-label{margin:0;font-size:13px;letter-spacing:.3em;color:var(--violet);font-weight:700}
+.style-row{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.style-chip{display:grid;justify-items:center;align-content:start;gap:2px;padding:8px 10px 7px;border-radius:14px;min-width:86px;letter-spacing:.08em;background:rgba(200,215,255,.06)}
+.style-chip b{font-size:14px;font-weight:700}
+.style-chip small{font-size:11px;color:var(--dim);letter-spacing:.04em}
+.style-chip img{width:66px;height:43px;object-fit:contain;display:block}
+.style-chip .sw{width:46px;height:22px;border-radius:7px;display:block;margin:10px 0 11px;box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
+.style-chip[aria-pressed="true"]{border-color:var(--mint);background:rgba(127,231,214,.16);box-shadow:inset 0 0 0 1px var(--mint)}
 @media (max-width:640px){
  .legend{grid-template-columns:1fr}
  .card.wide{padding:22px 18px}
@@ -104,9 +113,13 @@ h2{margin:0;font-family:var(--display);font-weight:900;font-size:32px;letter-spa
  <div class="card wide">
   <p class="eyebrow">Glass · Brick Breaker</p>
   <h1>琉璃打砖块</h1>
-  <p class="lead">左右移动球拍，把星光球弹回去，敲碎夜空里所有的琉璃砖。不同颜色的砖块脾气不同，有的要多打几下，有的会爆炸，有的会掉道具。</p>
+  <p class="lead">左右移动球拍，把星光球弹回去，敲碎夜空里所有的琉璃砖。不同颜色的砖块脾气不同，有的要多打几下，有的会爆炸，有的会掉道具。砖块还有五种风格：星夜、春樱、秋叶、冬雪、糖果。</p>
   <button id="startBtn" class="big" type="button">开始游戏</button>
   <p class="bestline">最高分 <b id="bestTitle">0</b></p>
+  <div class="styles">
+   <p class="styles-label">砖块风格</p>
+   <div class="style-row" id="styleRow" role="group" aria-label="砖块风格"></div>
+  </div>
   <div class="legend">
    <div><h3>砖块</h3><ul id="lgBricks"></ul></div>
    <div><h3>道具</h3><ul id="lgPU"></ul></div>
@@ -383,10 +396,11 @@ function buildBackground() {
   const g = bgLayer.getContext('2d');
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   const gr = g.createLinearGradient(0, 0, 0, ch);
-  gr.addColorStop(0, '#060820'); gr.addColorStop(.42, '#10103a'); gr.addColorStop(.78, '#24143f'); gr.addColorStop(1, '#3a1a48');
+  const T0 = THEMES[theme];
+  gr.addColorStop(0, T0.sky[0]); gr.addColorStop(.42, T0.sky[1]); gr.addColorStop(.78, T0.sky[2]); gr.addColorStop(1, T0.sky[3]);
   g.fillStyle = gr; g.fillRect(0, 0, cw, ch);
   const hz = g.createRadialGradient(cw / 2, ch * 1.05, 0, cw / 2, ch * 1.05, Math.max(cw, ch) * .75);
-  hz.addColorStop(0, 'rgba(255,120,170,.28)'); hz.addColorStop(.5, 'rgba(140,80,200,.08)'); hz.addColorStop(1, 'rgba(0,0,0,0)');
+  hz.addColorStop(0, T0.glow); hz.addColorStop(.5, 'rgba(140,80,200,.08)'); hz.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = hz; g.fillRect(0, 0, cw, ch);
   const R = rng(42);
   const n = Math.round(cw * ch / 5200);
@@ -396,17 +410,19 @@ function buildBackground() {
     if (s.r > 1.1 && twinkles.length < 70) twinkles.push(s); else stars.push(s);
   }
   for (const s of stars) { g.fillStyle = `rgba(230,236,255,${s.a})`; circle(g, s.x, s.y, s.r); }
+  initAmbient();
 }
 
 /* ================= sprites ================= */
 const sprites = new Map();
-function brickSprite(type, color, hp, maxHp, v) {
-  const key = type + color + hp + '|' + v;
+function brickSprite(type, color, hp, maxHp, v, th = theme) {
+  const key = type + color + hp + '|' + v + th;
   let s = sprites.get(key); if (s) return s;
   s = document.createElement('canvas');
   s.width = Math.ceil((BW + SPAD * 2) * RES); s.height = Math.ceil((BH + SPAD * 2) * RES);
   const g = s.getContext('2d'); g.scale(RES, RES); g.translate(SPAD, SPAD);
   paintBrick(g, type, color, hp, maxHp, BW, BH, v);
+  if (th !== 'glass') paintDecor2D(g, th, BW, BH, v);
   sprites.set(key, s); return s;
 }
 function capSprite(kind) {
@@ -524,10 +540,11 @@ function initGL() {
     import('three'),
     import('three/addons/geometries/RoundedBoxGeometry.js'),
     import('three/addons/environments/RoomEnvironment.js'),
-  ]).then(([T, RB, RE]) => setupGL(T, RB.RoundedBoxGeometry, RE.RoomEnvironment))
+    import('three/addons/utils/BufferGeometryUtils.js'),
+  ]).then(([T, RB, RE, BGU]) => setupGL(T, RB.RoundedBoxGeometry, RE.RoomEnvironment, BGU.mergeGeometries))
     .catch(e => console.warn('3D 渲染不可用，使用 2D 砖块', e));
 }
-function setupGL(T, RoundedBoxGeometry, RoomEnvironment) {
+function setupGL(T, RoundedBoxGeometry, RoomEnvironment, mergeGeometries) {
   let renderer;
   try {
     renderer = new T.WebGLRenderer({ canvas: glc, antialias: true, alpha: true, powerPreference: 'high-performance' });
@@ -637,10 +654,140 @@ function setupGL(T, RoundedBoxGeometry, RoomEnvironment) {
   }
   const DECAL = { g: 'gold', r: 'bomb', d: 'dark', s: 'steel' };
 
+  // ---------- style decorations: real geometry sitting on the bricks ----------
+  // leaf & flower atlas: maple, oval, ginkgo (white, tinted per leaf), sakura, daisy (full colour)
+  const atlasCv = document.createElement('canvas'); atlasCv.width = 640; atlasCv.height = 128;
+  (function paintAtlas(g) {
+    const cell = (i, fn) => { g.save(); g.translate(i * 128 + 64, 64); fn(); g.restore(); };
+    const veins = (pts) => { g.strokeStyle = 'rgba(70,35,10,.38)'; g.lineWidth = 2; g.lineCap = 'round'; for (const [x0, y0, x1, y1] of pts) { g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); } };
+    const tintFill = () => { const gr = g.createRadialGradient(0, 0, 4, 0, 0, 60); gr.addColorStop(0, '#ffffff'); gr.addColorStop(1, '#d8d0c4'); return gr; };
+    cell(0, () => {                       // maple
+      g.beginPath();
+      for (let i = 0; i <= 160; i++) {
+        const t = i / 160 * Math.PI * 2;
+        const r = 28 + 30 * Math.pow(Math.abs(Math.cos(t * 2.5)), .75) + 3.5 * Math.abs(Math.sin(t * 15)) - (Math.abs(t - Math.PI) < .45 ? 14 : 0);
+        g.lineTo(Math.sin(t) * r, -Math.cos(t) * r + 4);
+      }
+      g.closePath(); g.fillStyle = tintFill(); g.fill();
+      veins([[0, 4, 0, -50], [0, 4, 42, -14], [0, 4, -42, -14], [0, 4, 26, 36], [0, 4, -26, 36], [0, 4, 0, 60]]);
+    });
+    cell(1, () => {                       // oval leaf
+      g.rotate(-Math.PI / 2); leafPath(g, 58); g.fillStyle = tintFill(); g.fill();
+      veins([[-62, 0, 50, 0], [-20, 0, 0, -22], [-20, 0, 0, 22], [10, 0, 28, -14], [10, 0, 28, 14]]);
+    });
+    cell(2, () => {                       // ginkgo fan
+      g.beginPath(); g.moveTo(0, 30); g.lineTo(-54, -16); g.quadraticCurveTo(-30, -58, -3, -40); g.lineTo(0, -30); g.lineTo(3, -40); g.quadraticCurveTo(30, -58, 54, -16); g.closePath();
+      g.fillStyle = tintFill(); g.fill();
+      veins([[0, 30, 0, 60], [0, 30, -40, -24], [0, 30, -20, -38], [0, 30, 20, -38], [0, 30, 40, -24]]);
+    });
+    cell(3, () => {                       // sakura
+      for (let i = 0; i < 5; i++) {
+        g.save(); g.rotate(i * Math.PI * 2 / 5 - Math.PI / 2); g.translate(30, 0);
+        petalPath(g, 30); const gr = g.createLinearGradient(-30, 0, 30, 0); gr.addColorStop(0, '#ff8fbd'); gr.addColorStop(1, '#ffe4ef');
+        g.fillStyle = gr; g.fill(); g.restore();
+      }
+      g.fillStyle = '#ffd34f'; for (let i = 0; i < 8; i++) { const a = i * .785; circle(g, Math.cos(a) * 9, Math.sin(a) * 9, 3); }
+      g.fillStyle = '#e0507a'; circle(g, 0, 0, 7);
+    });
+    cell(4, () => {                       // daisy
+      g.fillStyle = '#ffffff';
+      for (let i = 0; i < 12; i++) { g.save(); g.rotate(i * Math.PI / 6); g.beginPath(); g.ellipse(0, -34, 9, 26, 0, 0, 6.283); g.fill(); g.restore(); }
+      const gr = g.createRadialGradient(-4, -4, 2, 0, 0, 18); gr.addColorStop(0, '#ffe680'); gr.addColorStop(1, '#f0a020');
+      g.fillStyle = gr; circle(g, 0, 0, 17);
+    });
+  })(atlasCv.getContext('2d'));
+  const atlas = new T.CanvasTexture(atlasCv);
+  atlas.colorSpace = T.SRGBColorSpace; atlas.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+  const DM = {
+    snow: new T.MeshPhysicalMaterial({ vertexColors: true, color: 0xf6faff, roughness: .78, sheen: 1, sheenColor: new T.Color('#cfe6ff'), sheenRoughness: .45, emissive: new T.Color('#0c1a30'), envMapIntensity: .9 }),
+    ice: new T.MeshPhysicalMaterial({ vertexColors: true, color: 0xd6f3ff, roughness: .04, clearcoat: 1, transparent: true, opacity: .8, iridescence: .3, emissive: new T.Color('#0e2638'), envMapIntensity: 1.7 }),
+    leaf: new T.MeshStandardMaterial({ vertexColors: true, map: atlas, alphaTest: .45, side: T.DoubleSide, roughness: .62 }),
+    moss: new T.MeshPhysicalMaterial({ vertexColors: true, roughness: .92, sheen: 1, sheenColor: new T.Color('#d8ffb0'), sheenRoughness: .35, envMapIntensity: .5 }),
+    frost: new T.MeshPhysicalMaterial({ vertexColors: true, roughness: .26, clearcoat: 1, clearcoatRoughness: .08, envMapIntensity: .9 }),
+    sprinkle: new T.MeshPhysicalMaterial({ vertexColors: true, roughness: .3, clearcoat: 1, envMapIntensity: .8 }),
+  };
+  function colorize(g, col) {
+    const c = col instanceof T.Color ? col : new T.Color(col), n = g.attributes.position.count, a = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
+    g.setAttribute('color', new T.BufferAttribute(a, 3)); return g;
+  }
+  function blob(rx, ry, rz, x, y, z, col, seg) {
+    const g = new T.SphereGeometry(1, seg, Math.max(6, (seg * .66) | 0)); g.scale(rx, ry, rz); g.translate(x, y, z); return colorize(g, col);
+  }
+  function leafGeo(cellI, size, curl, col) {
+    const g = new T.PlaneGeometry(size, size, 4, 4), pos = g.attributes.position, uv = g.attributes.uv;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i) / size, y = pos.getY(i) / size;
+      pos.setZ(i, curl * size * (x * x * 1.3 + y * y * .35));
+      uv.setX(i, (cellI + uv.getX(i)) / 5);
+    }
+    g.computeVertexNormals(); return colorize(g, col);
+  }
+  const merge = (list) => list.length ? mergeGeometries(list) : null;
+  // the brick's front face is at z = 0, its top edge at y = +BH/2
+  function capBlobs(R, cols, lumpy, seg) {
+    const geos = [], n = 6 + ((R() * 3) | 0), pick = () => cols[(R() * cols.length) | 0];
+    for (let i = 0; i < n; i++) {
+      const t = (i + .5) / n;
+      geos.push(blob(4.8 + R() * 3.5 * lumpy, 3.8 + R() * 2.6 * lumpy, 4 + R() * 1.4, -BW / 2 + 2 + t * (BW - 4) + (R() - .5) * 3, BH / 2 - 4 - R() * 3 * lumpy, -1 + R() * 1.4, pick(), seg));
+    }
+    geos.push(blob(BW / 2 + 1.5, 5, 3.6, 0, BH / 2 - 3.2, -.6, pick(), 18));
+    return geos;
+  }
+  function addDecor(grp, th, k) {
+    if (!th || th === 'glass') return;
+    const R = rng((k.seed || 1) * 977 + 31);
+    const add = (geo, mat, shadow) => { if (!geo) return; const m = new T.Mesh(geo, mat); m.castShadow = shadow; m.userData.decor = true; grp.add(m); };
+    if (th === 'snow') {
+      const geos = capBlobs(R, ['#ffffff', '#f4f8ff'], 1, 10);
+      if (R() < .5) geos.push(blob(3 + R() * 2, 2.2 + R(), 2.5, (R() - .5) * BW * .6, BH / 2 - 7.5 - R() * 2, .3, '#ffffff', 8));
+      add(merge(geos), DM.snow, true);
+      const ice = [];
+      if (R() > .3) for (let i = 0, n = 1 + ((R() * 3) | 0); i < n; i++) {
+        const h = 4 + R() * 6, g = new T.ConeGeometry(1 + R() * .9, h, 7);
+        g.rotateZ(Math.PI); g.translate(-BW / 2 + 6 + R() * (BW - 12), -BH / 2 - h / 2 + 3, -2.5); ice.push(colorize(g, '#ffffff'));
+      }
+      add(merge(ice), DM.ice, false);
+    } else if (th === 'spring') {
+      add(merge(capBlobs(R, ['#5aa83a', '#6fbf4a', '#4e9a34', '#86cf5a'], .7, 9)), DM.moss, true);
+      const fl = [];
+      for (let i = 0, n = 1 + ((R() * 2) | 0); i < n; i++) {
+        const x = -BW / 2 + 8 + R() * (BW - 16), y = BH / 2 - 4 - R() * 4;
+        if (R() < .6) { const lg = leafGeo(1, 9 + R() * 3, .2, '#5fae3c'); lg.rotateZ(R() * 6.28); lg.translate(x + 3, y - 2, 2.6); fl.push(lg); }
+        const g = leafGeo(R() < .65 ? 3 : 4, 9 + R() * 3, .12, '#ffffff'); g.rotateZ(R() * 6.28); g.translate(x, y, 3.4); fl.push(g);
+      }
+      add(merge(fl), DM.leaf, true);
+    } else if (th === 'autumn') {
+      const lv = [];
+      for (let i = 0, n = 1 + ((R() * 2.2) | 0); i < n; i++) {
+        const big = i === 0, g = leafGeo((R() * 3) | 0, big ? 27 + R() * 7 : 18 + R() * 5, .22, LEAF_TINT[(R() * LEAF_TINT.length) | 0]);
+        g.rotateZ(R() * 6.28); g.rotateX((R() - .5) * .45);
+        g.translate(-BW / 2 + 10 + R() * (BW - 20), BH / 2 - 6 - R() * (BH * .55), 2 + i * 1.6); lv.push(g);
+      }
+      add(merge(lv), DM.leaf, true);
+    } else if (th === 'candy') {
+      const col = FROST[(R() * FROST.length) | 0];
+      const geos = capBlobs(R, [col], .6, 12);
+      for (let i = 0, n = 2 + ((R() * 3) | 0); i < n; i++) {
+        const len = 2 + R() * 7, r = 1.5 + R() * .8, g = new T.CapsuleGeometry(r, len, 4, 10);
+        g.scale(1, 1, .75); g.translate(-BW / 2 + 5 + R() * (BW - 10), BH / 2 - 4 - len / 2, -.6); geos.push(colorize(g, col));
+      }
+      add(merge(geos), DM.frost, true);
+      const sp = [];
+      for (let i = 0, n = 8 + ((R() * 7) | 0); i < n; i++) {
+        const g = new T.CapsuleGeometry(.5, 1.7, 2, 5);
+        g.rotateZ(R() * 6.28); g.rotateX((R() - .5) * .6); g.translate(-BW / 2 + 3 + R() * (BW - 6), BH / 2 - 1 - R() * 6, 2.4 + R() * .8);
+        sp.push(colorize(g, SPRINKLE[(R() * SPRINKLE.length) | 0]));
+      }
+      add(merge(sp), DM.sprinkle, false);
+    }
+  }
+
   // ---------- bricks ----------
   let groups = [];
   function clearBricks() {
-    for (const g of groups) { scene.remove(g); g.userData.mat.dispose(); for (const ch of g.children) if (ch !== g.userData.mesh) ch.material.dispose(); }
+    for (const g of groups) { scene.remove(g); g.userData.mat.dispose(); for (const ch of g.children) { if (ch.userData.decor) ch.geometry.dispose(); else if (ch !== g.userData.mesh) ch.material.dispose(); } }
     groups = [];
   }
   function build() {
@@ -649,8 +796,9 @@ function setupGL(T, RoundedBoxGeometry, RoomEnvironment) {
       const grp = new T.Group();
       const mat = makeMat(k.type, k.color);
       const mesh = new T.Mesh(geo, mat);
-      mesh.position.z = -GDEPTH / 2; mesh.castShadow = true;
+      mesh.position.z = -GDEPTH / 2; mesh.castShadow = true; mesh.receiveShadow = true;
       grp.add(mesh);
+      addDecor(grp, theme, k);
       if (DECAL[k.type]) grp.add(decalMesh(DECAL[k.type]));
       grp.userData = { mat, mesh, k, gem: null, crack: null, hpShown: k.hp };
       if (k.type === '2' || k.type === '3') { grp.userData.gem = decalMesh('gem' + k.hp); grp.add(grp.userData.gem); }
@@ -671,7 +819,7 @@ function setupGL(T, RoundedBoxGeometry, RoomEnvironment) {
         grp.position.z = t * 24;
         mat.opacity = 1 - t;
         mat.emissive.copy(u.mat.userData.em).lerp(WHITE, .9 * (1 - t * .5));
-        for (const ch of grp.children) if (ch !== u.mesh) ch.material.opacity = 1 - t;
+        for (const ch of grp.children) { if (ch.userData.decor) ch.visible = false; else if (ch !== u.mesh) ch.material.opacity = 1 - t; }
         continue;
       }
       if (k.ap <= 0) { grp.visible = false; continue; }
@@ -797,7 +945,7 @@ function setupGL(T, RoundedBoxGeometry, RoomEnvironment) {
       const pl = new T.PointLight(0x9feaff, 900, 0, 1.6); pl.position.set(-22, -20, 30); sc.add(pl);
       r2.toneMappingExposure = .92;
       const c2 = new T.PerspectiveCamera(28, w / h, 1, 1000);
-      c2.position.set(0, -38, 118); c2.lookAt(0, 0, -6);
+      c2.position.set(0, -38, 124); c2.lookAt(0, 1, -6);
       const out = [];
       for (const [t, col] of BRICK_INFO) {
         const grp = new T.Group();
@@ -806,8 +954,23 @@ function setupGL(T, RoundedBoxGeometry, RoomEnvironment) {
         if (t === '2' || t === '3') grp.add(decalMesh('gem' + TYPES[t].hp));
         sc.add(grp); r2.render(sc, c2); out.push(c.toDataURL()); sc.remove(grp);
       }
+      // one decorated brick per style for the style picker
+      const prev = {};
+      for (const th of THEME_ORDER) {
+        const col = th === 'glass' ? '#5ea8ff' : THEMES[th].pal[th === 'snow' ? 0 : 1];
+        const grp = new T.Group();
+        const m = new T.Mesh(geo, makeMat('n', col)); m.position.z = -GDEPTH / 2; grp.add(m);
+        addDecor(grp, th, { seed: 7 });
+        sc.add(grp); r2.render(sc, c2); prev[th] = c.toDataURL(); sc.remove(grp);
+        for (const ch of grp.children) if (ch.userData.decor) ch.geometry.dispose();
+      }
       r2.dispose(); r2.forceContextLoss && r2.forceContextLoss();
       document.querySelectorAll('#lgBricks img').forEach((img, i) => { if (out[i]) img.src = out[i]; });
+      document.querySelectorAll('#styleRow .style-chip').forEach(btn => {
+        const src = prev[btn.dataset.t]; if (!src) return;
+        const img = btn.querySelector('img'), sw = btn.querySelector('.sw');
+        img.src = src; img.hidden = false; if (sw) sw.hidden = true;
+      });
     } catch (e) { console.warn('预览渲染失败', e); }
   }
 
@@ -816,6 +979,148 @@ function setupGL(T, RoundedBoxGeometry, RoomEnvironment) {
   resizeGL();
   build();
   legend();
+}
+
+/* ================= brick styles ================= */
+const THEMES = {
+  glass:  { name: '星夜', pal: null,
+    sky: ['#060820', '#10103a', '#24143f', '#3a1a48'], glow: 'rgba(255,120,170,.28)', aurora: ['#3de0c0', '#8a6bff', '#ff6bb5'], amb: null },
+  spring: { name: '春樱', pal: ['#ff8fbf', '#ffb0cf', '#8fd66a', '#6fcfba', '#b79cff', '#ffcf6a', '#ff9fae', '#7fc4ff'],
+    sky: ['#0b1230', '#1f234e', '#3a2a5c', '#6a3d6e'], glow: 'rgba(255,150,200,.34)', aurora: ['#7fe8b0', '#ff8fc8', '#b9a2ff'], amb: 'petal' },
+  autumn: { name: '秋叶', pal: ['#c8452c', '#e0762a', '#e3a92a', '#9a5a2a', '#7d8a2c', '#b5532f', '#d98a3a', '#a8322c'],
+    sky: ['#110a1a', '#28132a', '#47202e', '#7a3624'], glow: 'rgba(255,140,70,.32)', aurora: ['#ffb060', '#ff6a50', '#c08aff'], amb: 'leaf' },
+  snow:   { name: '冬雪', pal: ['#e04a5a', '#3d9cff', '#2fb98a', '#7a6cff', '#ff9a3d', '#3fcbe0', '#c04aa0', '#5a7cff'],
+    sky: ['#040e24', '#0c2444', '#1a3a5e', '#3a5a80'], glow: 'rgba(160,210,255,.3)', aurora: ['#5dffb0', '#5fb8ff', '#a08aff'], amb: 'snow' },
+  candy:  { name: '糖果', pal: null,
+    sky: ['#160b2b', '#34174d', '#552568', '#873a78'], glow: 'rgba(255,140,210,.36)', aurora: ['#ff8fd8', '#b69bff', '#7fe7ff'], amb: 'sugar' },
+};
+THEMES.candy.pal = PAL.candy;
+const THEME_ORDER = ['glass', 'spring', 'autumn', 'snow', 'candy'];
+const STYLE_OPTS = [['auto', '随关卡', '五种轮换'], ['glass', '星夜', '琉璃'], ['spring', '春樱', '苔藓和花'], ['autumn', '秋叶', '落叶'], ['snow', '冬雪', '积雪冰凌'], ['candy', '糖果', '糖霜彩针']];
+const FROST = ['#fff3f8', '#ffb3d3', '#6e3f26', '#c6f3df', '#fff0a8'];
+const SPRINKLE = ['#ff4f7a', '#ffd34f', '#4fc3ff', '#7dff8a', '#ffffff', '#b48aff'];
+const LEAF_TINT = ['#d9452b', '#f08a24', '#f3c13a', '#b5562a', '#9a3a24', '#e5a53a'];
+let themeChoice = store.get('theme', 'auto');
+if (themeChoice !== 'auto' && !THEMES[themeChoice]) themeChoice = 'auto';
+let theme = 'glass', attractN = 0;
+function pickTheme(n) {
+  if (themeChoice !== 'auto') return themeChoice;
+  if (state === 'title') return THEME_ORDER[attractN++ % THEME_ORDER.length];
+  return THEME_ORDER[(n - 1) % THEME_ORDER.length];
+}
+
+// ---- leaf / petal shapes shared by the 2D effects ----
+function leafPath(g, s) {
+  g.beginPath(); g.moveTo(-s, 0);
+  g.quadraticCurveTo(-s * .15, -s * .66, s, 0); g.quadraticCurveTo(-s * .15, s * .66, -s, 0);
+}
+function petalPath(g, s) {
+  g.beginPath(); g.moveTo(-s, 0);
+  g.bezierCurveTo(-s * .4, -s * .9, s * .7, -s * .75, s, -s * .16); g.lineTo(s * .7, 0); g.lineTo(s, s * .16);
+  g.bezierCurveTo(s * .7, s * .75, -s * .4, s * .9, -s, 0);
+}
+
+// ---- ambient weather: falls behind the playfield and, a little bigger, in front of it ----
+let amb = [];
+const AMB_COUNT = { snow: [80, 16], leaf: [14, 5], petal: [24, 7], sugar: [0, 26] };
+function initAmbient() {
+  amb = [];
+  const kind = THEMES[theme].amb; if (!kind) return;
+  const [nb, nf] = AMB_COUNT[kind], k = reduceMotion ? .35 : 1;
+  for (let i = 0; i < Math.round(nb * k); i++) amb.push(newAmb(kind, false, true));
+  for (let i = 0; i < Math.round(nf * k); i++) amb.push(newAmb(kind, true, true));
+}
+function newAmb(kind, front, anywhere) {
+  const p = { kind, front, x: Math.random() * cw, y: anywhere ? Math.random() * ch : -24, rot: rand(0, 6.28), vr: rand(-2, 2), ph: rand(0, 6.28), sway: rand(.6, 1.6) };
+  if (kind === 'snow') { p.s = front ? rand(1.8, 3.1) : rand(.8, 2.2); p.vy = front ? rand(50, 80) : rand(18, 45); p.amp = rand(10, 30); p.a = front ? .75 : rand(.35, .8); }
+  else if (kind === 'leaf') { p.s = front ? rand(9, 13) : rand(5, 8); p.vy = front ? rand(45, 70) : rand(22, 40); p.amp = rand(30, 60); p.col = LEAF_TINT[(Math.random() * LEAF_TINT.length) | 0]; p.a = front ? .95 : .55; p.vr = rand(-3, 3); }
+  else if (kind === 'petal') { p.s = front ? rand(5, 7) : rand(3, 5); p.vy = front ? rand(35, 55) : rand(18, 32); p.amp = rand(25, 50); p.col = ['#ffc2dc', '#ffd6e6', '#ffb0cf', '#fff0f6'][(Math.random() * 4) | 0]; p.a = front ? .9 : .55; p.vr = rand(-3, 3); }
+  else if (kind === 'sugar') { p.s = rand(2, 4.5); p.vy = rand(-26, -10); p.amp = rand(8, 20); p.col = ['#ffe08a', '#ff9fd8', '#9fe8ff', '#c8b0ff'][(Math.random() * 4) | 0]; p.a = .85; if (!anywhere) p.y = ch + 24; }
+  if (reduceMotion) { p.vy *= .5; p.amp *= .4; p.vr *= .3; }
+  return p;
+}
+function updAmbient(dt) {
+  for (let i = 0; i < amb.length; i++) {
+    const p = amb[i];
+    p.y += p.vy * dt; p.x += Math.cos(time * p.sway + p.ph) * p.amp * dt; p.rot += p.vr * dt;
+    if (p.vy > 0 ? p.y > ch + 24 : p.y < -24) amb[i] = newAmb(p.kind, p.front, false);
+    else if (p.x < -30) p.x += cw + 60; else if (p.x > cw + 30) p.x -= cw + 60;
+  }
+}
+function drawAmbient(front) {
+  for (const p of amb) if (p.front === front) drawFlake(ctx, p, p.x, p.y, p.a);
+  ctx.globalAlpha = 1;
+}
+function drawFlake(g, p, x, y, a) {
+  g.globalAlpha = a;
+  if (p.kind === 'snow') {
+    g.fillStyle = '#ffffff'; circle(g, x, y, p.s);
+    if (p.front) { g.globalAlpha = a * .12; circle(g, x, y, p.s * 2); }
+  } else if (p.kind === 'leaf' || p.kind === 'petal') {
+    g.save(); g.translate(x, y); g.rotate(p.rot);
+    const f = Math.cos(time * p.sway * 2.2 + p.ph); g.scale(Math.sign(f || 1) * Math.max(.18, Math.abs(f)), 1);
+    if (p.kind === 'leaf') {
+      leafPath(g, p.s); g.fillStyle = p.col; g.fill();
+      g.strokeStyle = 'rgba(60,20,0,.45)'; g.lineWidth = Math.max(.6, p.s * .08);
+      g.beginPath(); g.moveTo(-p.s * 1.3, 0); g.lineTo(p.s * .8, 0); g.stroke();
+    } else { petalPath(g, p.s); g.fillStyle = p.col; g.fill(); }
+    g.restore();
+  } else if (p.kind === 'sugar') {
+    g.globalAlpha = a * (.45 + .55 * Math.sin(time * 3 + p.ph));
+    star4(g, x, y, p.s * 1.7, p.s * .42, p.col);
+  }
+}
+
+// ---- what a style leaves behind when a brick is hit or breaks ----
+function decorBreak(k, strong) {
+  const top = k.y;
+  if (theme === 'snow') {
+    for (let i = 0; i < (strong ? 16 : 5); i++) addPart({ kind: 'amb', p: { kind: 'snow', s: rand(1.2, 3.2), front: false, ph: 0, sway: 1, rot: 0 },
+      x: k.x + Math.random() * BW, y: top + rand(-3, 6), vx: rand(-70, 70), vy: rand(-90, 10), g: 260, term: 90, life: rand(.9, 1.5), max: 1.5 });
+    addPart({ kind: 'puff', x: k.x + BW / 2, y: top + 3, r: 6, to: strong ? 40 : 20, life: strong ? .55 : .35, max: strong ? .55 : .35 });
+  } else if (theme === 'autumn') {
+    for (let i = 0; i < (strong ? 3 : 1); i++) addPart({ kind: 'amb', p: { kind: 'leaf', s: rand(6, 9), col: LEAF_TINT[(Math.random() * LEAF_TINT.length) | 0], ph: rand(0, 6), sway: rand(.8, 1.6), rot: rand(0, 6), vr: rand(-4, 4) },
+      x: k.x + Math.random() * BW, y: top + rand(0, BH), vx: rand(-50, 50), vy: rand(-70, -10), g: 140, term: 75, flutter: true, life: 2.4, max: 2.4 });
+  } else if (theme === 'spring') {
+    for (let i = 0; i < (strong ? 7 : 2); i++) addPart({ kind: 'amb', p: { kind: 'petal', s: rand(3.5, 5.5), col: ['#ffc2dc', '#ffd6e6', '#ffb0cf', '#ffffff'][(Math.random() * 4) | 0], ph: rand(0, 6), sway: rand(.8, 1.6), rot: rand(0, 6), vr: rand(-4, 4) },
+      x: k.x + Math.random() * BW, y: top + rand(0, BH * .6), vx: rand(-60, 60), vy: rand(-80, -10), g: 120, term: 60, flutter: true, life: 2, max: 2 });
+  } else if (theme === 'candy') {
+    for (let i = 0; i < (strong ? 14 : 4); i++) addPart({ kind: 'sprinkle', x: k.x + Math.random() * BW, y: top + rand(0, 8), vx: rand(-150, 150), vy: rand(-260, -40), rot: rand(0, 6), vr: rand(-14, 14), col: SPRINKLE[(Math.random() * SPRINKLE.length) | 0], life: rand(.7, 1.1), max: 1.1 });
+  }
+}
+
+// ---- simple painted versions of the styles for the 2D fallback ----
+function paintDecor2D(g, th, w, h, v) {
+  const R = rng(v * 7 + 3);
+  if (th === 'autumn') {
+    for (let i = 0; i < 2; i++) {
+      g.save(); g.translate(w * (.25 + i * .45 + R() * .1), h * (.3 + R() * .3)); g.rotate(R() * 6.28);
+      leafPath(g, 8 + R() * 3); g.fillStyle = LEAF_TINT[(R() * LEAF_TINT.length) | 0]; g.fill();
+      g.strokeStyle = 'rgba(60,20,0,.45)'; g.lineWidth = .8; g.beginPath(); g.moveTo(-10, 0); g.lineTo(7, 0); g.stroke();
+      g.restore();
+    }
+    return;
+  }
+  if (th !== 'snow' && th !== 'spring' && th !== 'candy') return;
+  const col = th === 'snow' ? '#f6faff' : th === 'spring' ? '#78c24a' : FROST[v % FROST.length];
+  const dark = th === 'snow' ? '#b8cde6' : th === 'spring' ? '#3f7d2a' : shade(col, -.28);
+  g.save();
+  g.fillStyle = dark;
+  for (let x = 4; x < w - 2; x += 7) { g.beginPath(); g.ellipse(x, 3, 5.5, 4, 0, 0, 6.283); g.fill(); }
+  g.fillStyle = col;
+  for (let x = 4; x < w - 2; x += 7) { g.beginPath(); g.ellipse(x, 1.6, 5.5, 3.6, 0, 0, 6.283); g.fill(); }
+  if (th === 'candy') {
+    for (let i = 0; i < 3; i++) { const x = 6 + R() * (w - 12); rr(g, x, 2, 3.6, 4 + R() * 7, 1.8); g.fill(); }
+    for (let i = 0; i < 8; i++) { g.save(); g.translate(3 + R() * (w - 6), R() * 4); g.rotate(R() * 6.28); g.fillStyle = SPRINKLE[(R() * SPRINKLE.length) | 0]; g.fillRect(-1.6, -.5, 3.2, 1); g.restore(); }
+  } else if (th === 'snow') {
+    g.fillStyle = 'rgba(214,243,255,.9)';
+    for (let i = 0; i < 2; i++) { const x = 8 + R() * (w - 16); g.beginPath(); g.moveTo(x - 2, h - 1); g.lineTo(x + 2, h - 1); g.lineTo(x, h + 5 + R() * 3); g.closePath(); g.fill(); }
+  } else {
+    const fx0 = 10 + R() * (w - 20), fy0 = h * .55;
+    g.fillStyle = '#ffc2dc'; for (let i = 0; i < 5; i++) { const a = i * 1.2566; circle(g, fx0 + Math.cos(a) * 2.6, fy0 + Math.sin(a) * 2.6, 2.2); }
+    g.fillStyle = '#ffd34f'; circle(g, fx0, fy0, 1.4);
+  }
+  g.restore();
 }
 
 /* ================= game state ================= */
@@ -834,7 +1139,9 @@ function loadLevel(n) {
   let def;
   if (n <= LEVELS.length) def = LEVELS[n - 1]; else def = genLevel(n);
   levelName = def.name;
-  const pal = PAL[def.pal];
+  const th = pickTheme(n);
+  if (th !== theme) { theme = th; sprites.clear(); buildBackground(); }
+  const pal = THEMES[theme].pal || PAL[def.pal];
   bricks = []; grid = [];
   def.map.forEach((row, r) => {
     for (let c = 0; c < COLS; c++) {
@@ -843,7 +1150,7 @@ function loadLevel(n) {
       const k = {
         r, c, type: t, x: MX + c * (BW + GAP), y: BTOP + r * (BH + GAP),
         hp: TYPES[t].hp, maxHp: TYPES[t].hp, color: t === 'n' ? pal[r % pal.length] : TCOL[t],
-        alive: true, flash: 0, v: (Math.random() * 3) | 0,
+        alive: true, flash: 0, v: (Math.random() * 3) | 0, seed: n * 131 + r * 17 + c * 7 + 1,
         ap: -(r * .055 + Math.abs(c - 5.5) * .028),
       };
       bricks.push(k); grid[r * COLS + c] = k;
@@ -1022,6 +1329,9 @@ function updParts(dt) {
     else if (p.kind === 'text') { p.y += p.vy * dt; p.vy *= (1 - 1.5 * dt); }
     else if (p.kind === 'ring') { p.r += (p.to - p.r) * Math.min(1, dt * 9); }
     else if (p.kind === 'flame') { p.x += p.vx * dt; p.y += p.vy * dt; p.s *= (1 - 2.5 * dt); }
+    else if (p.kind === 'amb') { p.vx *= (1 - 1.5 * dt); p.vy = Math.min(p.vy + p.g * dt, p.term || 1e9); p.x += p.vx * dt + (p.flutter ? Math.cos(time * 2.4 + p.p.ph) * 28 * dt : 0); p.y += p.vy * dt; p.p.rot += (p.p.vr || 2) * dt; }
+    else if (p.kind === 'puff') { p.r += (p.to - p.r) * Math.min(1, dt * 6); p.y += 12 * dt; }
+    else if (p.kind === 'sprinkle') { p.vy += 900 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt; }
   }
 }
 
@@ -1039,6 +1349,7 @@ function hitBrick(k, fire, b, px, py) {
   else {
     sfx.crack(); stopFor(.035); kickBy(k.kx, k.ky, 3.5); buzz(8);
     const dark = shade(k.color, -.5);
+    decorBreak(k, false);
     if (G.ready) G.shatter(k, 6, .55);
     else for (let i = 0; i < 7; i++) addPart({ kind: 'shard', x: k.x + Math.random() * BW, y: k.y + BH - 4, vx: rand(-110, 110) + k.kx * 80, vy: rand(-40, 120), rot: 0, vr: rand(-8, 8), s: rand(3, 6), life: .6, max: .6, col: k.color, dark });
   }
@@ -1057,6 +1368,7 @@ function destroyBrick(k) {
     sfx.brick(combo);
   }
   shatter(k);
+  decorBreak(k, true);
   stopFor(.05); buzz(14);
   // neighbours wobble away from the break
   for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
@@ -1092,7 +1404,9 @@ function explode(k) {
 function applyPU(kind) {
   const p = PU[kind];
   if (state !== 'title') {
-    floatText(paddle.x, paddle.y - 34, p.name, p.bad ? '#ff9aa6' : '#bff8ee', 22);
+    const stackN = parts.filter(q => q.kind === 'text' && q.pu && q.life > .55).length;
+    floatText(paddle.x, paddle.y - 34 - stackN * 26, p.name, p.bad ? '#ff9aa6' : '#bff8ee', 22);
+    parts[parts.length - 1].pu = true;
     if (p.bad) sfx.bad(); else { sfx.power(); score += 100; }
   }
   burstAt(paddle.x, paddle.y - 6, p.col, 16);
@@ -1134,6 +1448,7 @@ function update(dt) {
   paddle.dip = Math.max(0, (paddle.dip || 0) - dt * 6);
   for (const b of balls) if (b.sq) b.sq = Math.max(0, b.sq - dt * 7);
   updParts(dt);
+  updAmbient(dt);
   for (const k of bricks) { if (k.ap < 1) k.ap = Math.min(1, k.ap + dt * 2.4); k.flash = Math.max(0, k.flash - dt * 6); if (k.bump) k.bump = Math.max(0, k.bump - dt * 5.5); }
   if (state === 'clear') {
     clearT += dt;
@@ -1311,6 +1626,7 @@ function draw(gdt) {
     ctx.fillStyle = `rgba(240,244,255,${a})`; circle(ctx, s.x, s.y, s.r);
     if (s.r > 1.6) { ctx.fillStyle = `rgba(200,220,255,${a * .25})`; circle(ctx, s.x, s.y, s.r * 3); }
   }
+  drawAmbient(false);
   ctx.setTransform(dpr * scale, 0, 0, dpr * scale, ox * dpr, oy * dpr);
   drawField();
   drawBricks();
@@ -1325,6 +1641,9 @@ function draw(gdt) {
   drawPaddle();
   for (const b of balls) drawBall(b);
   drawParts();
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawAmbient(true);
+  ctx.setTransform(dpr * scale, 0, 0, dpr * scale, ox * dpr, oy * dpr);
   drawHUD();
   drawChips();
   drawHints();
@@ -1345,7 +1664,9 @@ function drawAurora() {
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   const t = reduceMotion ? 0 : time;
-  for (const a of AURORA) {
+  const AC2 = THEMES[theme].aurora;
+  AURORA.forEach((a, ai) => {
+    const col = AC2[ai] || a.col;
     const base = ch * a.y, amp = ch * a.amp, th = ch * a.th, N = 28;
     const ys = [];
     for (let i = 0; i <= N; i++) {
@@ -1353,13 +1674,13 @@ function drawAurora() {
       ys.push(base + Math.sin(x * a.f * 6.28 + t * a.sp * 6.28 + a.ph) * amp + Math.sin(x * 9 - t * .4 + a.ph) * amp * .35);
     }
     const g = ctx.createLinearGradient(0, base - th, 0, base + amp + th * .25);
-    g.addColorStop(0, rgba(a.col, 0)); g.addColorStop(.7, rgba(a.col, .13)); g.addColorStop(.86, rgba(a.col, .2)); g.addColorStop(1, rgba(a.col, 0));
+    g.addColorStop(0, rgba(col, 0)); g.addColorStop(.7, rgba(col, .13)); g.addColorStop(.86, rgba(col, .2)); g.addColorStop(1, rgba(col, 0));
     ctx.fillStyle = g;
     ctx.beginPath();
     for (let i = 0; i <= N; i++) ctx.lineTo(cw * i / N, ys[i] - th);
     for (let i = N; i >= 0; i--) ctx.lineTo(cw * i / N, ys[i] + th * .22);
     ctx.closePath(); ctx.fill();
-  }
+  });
   ctx.restore();
 }
 
@@ -1528,6 +1849,18 @@ function drawBall(b) {
 }
 function drawParts() {
   for (const p of parts) {
+    if (p.kind === 'amb') drawFlake(ctx, p.p, p.x, p.y, clamp(p.life / p.max * 2.5, 0, 1) * (p.p.a || 1));
+    else if (p.kind === 'puff') {
+      const a = p.life / p.max, g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+      g.addColorStop(0, `rgba(255,255,255,${a * .7})`); g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.globalAlpha = 1; ctx.fillStyle = g; circle(ctx, p.x, p.y, p.r);
+    } else if (p.kind === 'sprinkle') {
+      ctx.save(); ctx.globalAlpha = clamp(p.life / p.max * 2, 0, 1); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.fillStyle = p.col; rr(ctx, -2.3, -.85, 4.6, 1.7, .85); ctx.fill(); ctx.restore();
+    }
+  }
+  ctx.globalAlpha = 1;
+  for (const p of parts) {
     const a = clamp(p.life / p.max, 0, 1);
     if (p.kind === 'shard') {
       ctx.save(); ctx.globalAlpha = a; ctx.translate(p.x, p.y); ctx.rotate(p.rot);
@@ -1592,7 +1925,7 @@ function drawHUD() {
   ctx.font = `900 ${26 * K}px ${FONT_SERIF}`; ctx.fillStyle = '#ffffff';
   ctx.fillText(`第 ${level} 关`, W / 2, 44);
   ctx.font = `500 ${14 * K}px ${FONT_SANS}`; ctx.fillStyle = 'rgba(127,231,214,.9)';
-  ctx.fillText(levelName, W / 2, 68 + 4 * (K - 1));
+  ctx.fillText(`${levelName} · ${THEMES[theme].name}`, W / 2, 68 + 4 * (K - 1));
   // lives as little balls, right-aligned before the tool pill
   const r = 8 * Math.min(K, 1.25), gap = 22 * Math.min(K, 1.25);
   const shown = Math.min(lives, 5);
@@ -1649,7 +1982,7 @@ function buildLegend() {
   lb.innerHTML = ''; lp.innerHTML = '';
   for (const [t, col, name, desc] of BRICK_INFO) {
     const li = document.createElement('li');
-    const img = new Image(); img.alt = ''; img.src = brickSprite(t, col, TYPES[t].hp, TYPES[t].hp, 0).toDataURL();
+    const img = new Image(); img.alt = ''; img.src = brickSprite(t, col, TYPES[t].hp, TYPES[t].hp, 0, 'glass').toDataURL();
     const sp = document.createElement('span'); sp.innerHTML = `<b>${name}</b>${desc}`;
     li.append(img, sp); lb.appendChild(li);
   }
@@ -1661,6 +1994,24 @@ function buildLegend() {
     li.append(img, sp); lp.appendChild(li);
   }
   sprites.clear(); RES = savedRes;
+}
+
+function buildStylePicker() {
+  const row = document.getElementById('styleRow');
+  row.innerHTML = '';
+  for (const [id, name, sub] of STYLE_OPTS) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'style-chip'; b.dataset.t = id;
+    b.setAttribute('aria-pressed', String(themeChoice === id));
+    const cols = id === 'auto' ? THEME_ORDER.map(t => THEMES[t].aurora[0]) : THEMES[id].aurora;
+    b.innerHTML = `<span class="sw" style="background:linear-gradient(90deg,${cols.join(',')})"></span><img alt="" hidden><b>${name}</b><small>${sub}</small>`;
+    b.addEventListener('click', () => {
+      themeChoice = id; store.set('theme', id);
+      row.querySelectorAll('.style-chip').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+      if (state === 'title') { loadLevel(1 + ((Math.random() * LEVELS.length) | 0)); serve(); }
+    });
+    row.appendChild(b);
+  }
 }
 
 /* ================= input ================= */
@@ -1725,6 +2076,7 @@ resize();
 loadLevel(1); serve();
 document.getElementById('bestTitle').textContent = best.toLocaleString();
 buildLegend();
+buildStylePicker();
 initGL();
 // make sure the CJK subsets the canvas uses are loaded, then redraw text sprites
 if (document.fonts && document.fonts.load) {
