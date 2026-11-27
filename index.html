@@ -92,6 +92,23 @@ h2{margin:0;font-family:var(--display);font-weight:900;font-size:32px;letter-spa
 .style-chip img{width:66px;height:43px;object-fit:contain;display:block}
 .style-chip .sw{width:46px;height:22px;border-radius:7px;display:block;margin:10px 0 11px;box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
 .style-chip[aria-pressed="true"]{border-color:var(--mint);background:rgba(127,231,214,.16);box-shadow:inset 0 0 0 1px var(--mint)}
+/* 玩法设置：落点提示 / 简单模式 */
+.opts{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;width:100%}
+.opt{display:grid;grid-template-columns:1fr auto;align-items:center;gap:2px 14px;text-align:left;border-radius:16px;padding:10px 14px 10px 16px;
+ min-height:56px;width:min(300px,100%);letter-spacing:.06em;background:rgba(200,215,255,.06)}
+.opt b{font-size:16px;font-weight:700}
+.opt small{grid-column:1;font-size:12px;color:var(--dim);letter-spacing:.02em;line-height:1.45}
+.opt i{grid-column:2;grid-row:1/span 2;font-style:normal;font-size:14px;font-weight:700;letter-spacing:.1em;padding:5px 12px;border-radius:999px;
+ border:1px solid var(--line);color:var(--dim)}
+.opt i::after{content:"关"}
+.opt[aria-pressed="true"]{border-color:var(--mint);background:rgba(127,231,214,.14)}
+.opt[aria-pressed="true"] i{background:var(--mint);border-color:var(--mint);color:#0b1a2a}
+.opt[aria-pressed="true"] i::after{content:"开"}
+#ovPause .card{width:min(520px,100%)}
+/* 菜单里的按钮在触屏上要够大 */
+.card button:not(.style-chip):not(.opt),.row a.lobby{min-height:44px}
+.row a.lobby{display:inline-flex;align-items:center}
+@media (pointer:coarse){.big{font-size:20px;padding-top:15px;padding-bottom:15px}.card button:not(.style-chip):not(.opt),.row a.lobby{min-height:48px}}
 @media (max-width:640px){
  .legend{grid-template-columns:1fr}
  .card.wide{padding:22px 18px}
@@ -123,6 +140,10 @@ h2{margin:0;font-family:var(--display);font-weight:900;font-size:32px;letter-spa
   <button id="startBtn" class="big" type="button">开始游戏</button>
   <button id="freshBtn" type="button" hidden>从第 1 关开始</button>
   <p class="bestline">最高分 <b id="bestTitle">0</b></p>
+  <div class="opts" role="group" aria-label="玩法设置">
+   <button type="button" class="opt" data-opt="hint" aria-pressed="true"><b>落点提示</b><small>球往下落时，标出它会落到哪里</small><i></i></button>
+   <button type="button" class="opt" data-opt="easy" aria-pressed="false"><b>简单模式</b><small>球慢一点，球拍宽一点，每个球带一层护盾</small><i></i></button>
+  </div>
   <div class="styles">
    <p class="styles-label">砖块风格</p>
    <div class="style-row" id="styleRow" role="group" aria-label="砖块风格"></div>
@@ -131,7 +152,7 @@ h2{margin:0;font-family:var(--display);font-weight:900;font-size:32px;letter-spa
    <div><h3>砖块</h3><ul id="lgBricks"></ul></div>
    <div><h3>道具</h3><ul id="lgPU"></ul></div>
   </div>
-  <p class="keys">电脑：鼠标或 <kbd>←</kbd><kbd>→</kbd> 移动，<kbd>空格</kbd> 或点击发球，<kbd>P</kbd> 暂停，<kbd>B</kbd> 音乐，<kbd>M</kbd> 音效<br>iPad / 手机：手指在屏幕上左右滑动，轻点发球</p>
+  <p class="keys">电脑：鼠标或 <kbd>←</kbd><kbd>→</kbd> 移动，<kbd>空格</kbd> 或点击发球，<kbd>P</kbd> 暂停，<kbd>B</kbd> 音乐，<kbd>M</kbd> 音效<br>iPad / 手机：手指放在屏幕任意地方左右拖动（不用按在球拍上），轻点发球；几秒不动会自动发球</p>
  </div>
 </div>
 
@@ -139,6 +160,10 @@ h2{margin:0;font-family:var(--display);font-weight:900;font-size:32px;letter-spa
  <div class="card">
   <h2>已暂停</h2>
   <button id="resumeBtn" class="big" type="button">继续</button>
+  <div class="opts" role="group" aria-label="玩法设置">
+   <button type="button" class="opt" data-opt="hint" aria-pressed="true"><b>落点提示</b><small>球往下落时，标出它会落到哪里</small><i></i></button>
+   <button type="button" class="opt" data-opt="easy" aria-pressed="false"><b>简单模式</b><small>球慢一点，球拍宽一点，每个球带一层护盾</small><i></i></button>
+  </div>
   <div class="row"><button id="restartBtn" type="button">重来这一关</button><button id="homeBtn1" type="button">回到主页</button><a class="lobby" href="https://hitanorain.github.io/">返回游戏厅</a></div>
  </div>
 </div>
@@ -1303,6 +1328,11 @@ const wallFlash = { l: 0, r: 0, t: 0 };
 const paddle = { x: W / 2, y: H - 104, w: PBASE, tx: W / 2, flash: 0 };
 const keys = {};
 let usingKeys = false;
+// 玩法设置
+let aimHint = store.get('aimHint', true), easyMode = store.get('easy', false);
+const EASY_SPEED = .78, EASY_WIDE = 1.3, AUTO_SERVE = 5;   // 简单模式：球速、球拍宽度；不操作几秒后自动发球
+function catchTol() { return BR * (easyMode ? 2.2 : 1.2); }  // 球拍两端多出来的接球宽容度
+function idle() { for (const b of balls) if (b.stuck) b.stuckT = 0; }
 
 function loadLevel(n) {
   let def;
@@ -1351,13 +1381,13 @@ function genLevel(n) {
 
 function newBall(x, y, vx, vy) { return { x, y, vx, vy, stuck: false, off: 0, stuckT: 0, trail: [], dead: false }; }
 function baseSpeed() { return Math.min(470 + level * 16, 660); }
-function curSpeed() { return baseSpeed() * ramp * (fx.slow > 0 ? .68 : 1) * (fx.fast > 0 ? 1.3 : 1); }
+function curSpeed() { return baseSpeed() * ramp * (easyMode ? EASY_SPEED : 1) * (fx.slow > 0 ? .68 : 1) * (fx.fast > 0 ? 1.3 : 1); }
 
 function serve() {
   const b = newBall(paddle.x, paddle.y - PH / 2 - BR, 0, 0);
   b.stuck = true; b.off = 0;
   balls = [b];
-  if (state !== 'title') state = 'serve';
+  if (state !== 'title') { state = 'serve'; if (easyMode) shield = Math.max(shield, 1); }
   attractT = 0;
 }
 function aimAngle(b) {
@@ -1650,7 +1680,7 @@ function update(dt) {
   for (const k in fx) if (fx[k] > 0) fx[k] = Math.max(0, fx[k] - dt);
 
   // paddle
-  const tw = PBASE * (fx.wide > 0 ? 1.55 : 1) * (fx.shrink > 0 ? .62 : 1);
+  const tw = PBASE * (easyMode && !auto ? EASY_WIDE : 1) * (fx.wide > 0 ? 1.55 : 1) * (fx.shrink > 0 ? .62 : 1);
   paddle.w += (tw - paddle.w) * Math.min(1, dt * 10);
   if (auto) {
     let tgt = null;
@@ -1659,7 +1689,7 @@ function update(dt) {
     if (tgt) paddle.tx = tgt.x + Math.sin(time * .9) * paddle.w * .32;
   } else {
     const kd = (keys.ArrowLeft || keys.KeyA ? -1 : 0) + (keys.ArrowRight || keys.KeyD ? 1 : 0);
-    if (kd) { usingKeys = true; paddle.tx += kd * 980 * dt; }
+    if (kd) { usingKeys = true; paddle.tx += kd * 980 * dt; idle(); }
   }
   paddle.tx = clamp(paddle.tx, paddle.w / 2, W - paddle.w / 2);
   const px0 = paddle.x;
@@ -1683,7 +1713,7 @@ function update(dt) {
       b.off = clamp(b.off, -paddle.w / 2 + 4, paddle.w / 2 - 4);
       b.x = paddle.x + b.off; b.y = paddle.y - PH / 2 - BR;
       b.stuckT += dt;
-      if ((state === 'play' && b.stuckT > 2.6) || (auto && b.stuckT > .7)) launch();
+      if ((state === 'play' && b.stuckT > 2.6) || (state === 'serve' && b.stuckT > AUTO_SERVE) || (auto && b.stuckT > .7)) launch();
       continue;
     }
     stepBall(b, dt);
@@ -1737,12 +1767,12 @@ function stepBall(b, dt) {
   const SHY = H - 58;
   for (let i = 0; i < steps; i++) {
     b.x += b.vx * sdt; b.y += b.vy * sdt;
-    if (b.x < BR) { b.x = BR; b.vx = Math.abs(b.vx); wallFlash.l = 1; b.sq = .5; if (state !== 'title') sfx.wall(); }
-    else if (b.x > W - BR) { b.x = W - BR; b.vx = -Math.abs(b.vx); wallFlash.r = 1; b.sq = .5; if (state !== 'title') sfx.wall(); }
+    if (b.x < BR) { b.x = Math.min(2 * BR - b.x, W - BR); b.vx = Math.abs(b.vx); wallFlash.l = 1; b.sq = .5; if (state !== 'title') sfx.wall(); }
+    else if (b.x > W - BR) { b.x = Math.max(2 * (W - BR) - b.x, BR); b.vx = -Math.abs(b.vx); wallFlash.r = 1; b.sq = .5; if (state !== 'title') sfx.wall(); }
     if (b.y < TOPWALL + BR) { b.y = TOPWALL + BR; b.vy = Math.abs(b.vy); wallFlash.t = 1; b.sq = .5; if (state !== 'title') sfx.wall(); }
     // paddle
     if (b.vy > 0 && b.y + BR >= paddle.y - PH / 2 && b.y <= paddle.y + PH / 2 &&
-        b.x >= paddle.x - paddle.w / 2 - BR * .7 && b.x <= paddle.x + paddle.w / 2 + BR * .7) {
+        Math.abs(b.x - paddle.x) <= paddle.w / 2 + catchTol()) {
       paddleHit(b);
       if (b.stuck) return;
     }
@@ -1828,6 +1858,7 @@ function draw(gdt) {
   drawBolts();
   drawShield();
   drawPaddle();
+  drawLanding();
   for (const b of balls) drawBall(b);
   drawParts();
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -2148,13 +2179,75 @@ function drawChips() {
   }
   ctx.globalAlpha = 1;
 }
+/* ---- 落点预测：球往下飞时，算出它会落到球拍那条线的哪里（含左右墙反弹） ---- */
+function predictLanding(b) {
+  if (b.stuck || b.dead || b.vy <= 0) return null;
+  const ty = paddle.y - PH / 2 - BR;            // 球心碰到球拍上沿时的高度
+  if (b.y >= ty) return null;
+  const t = (ty - b.y) / b.vy;                  // 速度大小会变，方向不变，所以落点不受影响
+  const span = W - 2 * BR;
+  const fold = x => { let u = (x - BR) % (2 * span); if (u < 0) u += 2 * span; return BR + (u > span ? 2 * span - u : u); };
+  // 路上要是还会撞到砖块，预测就不准了，这时不显示
+  let low = -1;
+  for (const k of bricks) if (k.alive && k.ap >= 1 && k.y + BH > low) low = k.y + BH;
+  if (low > 0 && b.y < low + BR) {
+    const yEnd = Math.min(ty, low + BR), n = Math.ceil((yEnd - b.y) / (BR * .8));
+    for (let i = 1; i <= n; i++) {
+      const y = b.y + (yEnd - b.y) * i / n, x = fold(b.x + b.vx * (y - b.y) / b.vy);
+      for (const k of bricks) {
+        if (!k.alive || k.ap < 1) continue;
+        if (x > k.x - BR && x < k.x + BW + BR && y > k.y - BR && y < k.y + BH + BR) return null;
+      }
+    }
+  }
+  return { x: fold(b.x + b.vx * t), t };
+}
+function drawLanding() {
+  if (!aimHint || state !== 'play') return;
+  const list = [];
+  for (const b of balls) { const p = predictLanding(b); if (p) list.push(p); }
+  if (!list.length) return;
+  list.sort((a, c) => a.t - c.t);
+  const K = clamp(.7 / scale, 1, 1.45);         // 小屏幕上画大一点
+  const y0 = paddle.y + PH / 2 + 14;            // 落点圈画在球拍下方，不会被球拍挡住
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (let i = Math.min(list.length, 4) - 1; i >= 0; i--) {
+    const p = list[i], main = i === 0;
+    const ok = Math.abs(p.x - paddle.x) <= paddle.w / 2 + catchTol();
+    const col = ok ? '#8dffc0' : '#ffd66b';     // 绿色：接得住；黄色：要挪过去
+    const a = clamp(1.3 - p.t / 1.8, .6, 1) * (main ? 1 : .6);
+    const pulse = 1 + .08 * Math.sin(time * 7), rw = (main ? 26 : 18) * K * pulse, rh = rw * .34;
+    // 光晕
+    const g = ctx.createRadialGradient(p.x, y0, 0, p.x, y0, rw * 1.7);
+    g.addColorStop(0, rgba(col, .45 * a)); g.addColorStop(1, rgba(col, 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(p.x, y0, rw * 1.7, rh * 1.9, 0, 0, 6.283); ctx.fill();
+    // 圈：先描一道深色底，任何背景上都看得清
+    ctx.globalAlpha = a;
+    ctx.beginPath(); ctx.ellipse(p.x, y0, rw, rh, 0, 0, 6.283);
+    ctx.strokeStyle = 'rgba(8,10,30,.7)'; ctx.lineWidth = 6; ctx.stroke();
+    ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.stroke();
+    // 球拍上方的小箭头，指向落点
+    const s = (main ? 11 : 8) * K, ay = paddle.y - PH / 2 - 20 - Math.abs(Math.sin(time * 5)) * 5;
+    ctx.beginPath(); ctx.moveTo(p.x - s, ay - s * .8); ctx.lineTo(p.x, ay); ctx.lineTo(p.x + s, ay - s * .8);
+    ctx.strokeStyle = 'rgba(8,10,30,.7)'; ctx.lineWidth = 7; ctx.stroke();
+    ctx.strokeStyle = col; ctx.lineWidth = 3.5; ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
 function drawHints() {
   if (state !== 'serve') return;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.globalAlpha = .6 + .4 * Math.sin(time * 3.2);
   ctx.font = `500 ${20 * clamp(.7 / scale, 1, 1.45)}px ${FONT_SANS}`; ctx.fillStyle = '#e8f6ff';
-  ctx.fillText(touchMode ? '左右滑动瞄准，轻点屏幕发球' : '移动瞄准，点击或按空格发球', W / 2, paddle.y - 190);
+  ctx.fillText(touchMode ? '手指左右拖动瞄准，轻点屏幕发球' : '移动瞄准，点击或按空格发球', W / 2, paddle.y - 190);
   ctx.globalAlpha = 1;
+  const b = balls.find(q => q.stuck), left = b ? AUTO_SERVE - b.stuckT : 99;
+  if (left < 3.2) {
+    ctx.globalAlpha = .85; ctx.font = `500 ${16 * clamp(.7 / scale, 1, 1.45)}px ${FONT_SANS}`; ctx.fillStyle = 'rgba(200,245,255,.9)';
+    ctx.fillText(`${Math.max(1, Math.ceil(left))} 秒后自动发球`, W / 2, paddle.y - 150);
+    ctx.globalAlpha = 1;
+  }
 }
 
 /* ================= overlays ================= */
@@ -2207,29 +2300,51 @@ function buildStylePicker() {
 let touchMode = matchMedia('(pointer: coarse)').matches;
 function toField(clientX) { return (clientX - ox) / scale; }
 function playing() { return state === 'play' || state === 'serve'; }
+// 鼠标：球拍跟着鼠标走。触屏：手指在任意位置左右拖动，球拍按拖动距离跟着走（相对拖动），手指不用按在球拍上挡住视线
+const TOUCH_GAIN = 1.3;
+let drag = null;   // { id, lastX, x0, y0, t0, moved }
 window.addEventListener('pointermove', e => {
   if (!playing()) return;
-  if (e.pointerType === 'mouse' || e.buttons || e.pointerType === 'touch' || e.pointerType === 'pen') {
-    usingKeys = false;
-    paddle.tx = toField(e.clientX);
+  if (e.pointerType === 'mouse') {
+    usingKeys = false; paddle.tx = toField(e.clientX); idle(); return;
   }
+  if (!drag || e.pointerId !== drag.id) return;
+  usingKeys = false;
+  const dx = (e.clientX - drag.lastX) / scale * TOUCH_GAIN;
+  drag.lastX = e.clientX;
+  if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 12) drag.moved = true;
+  paddle.tx = clamp(paddle.tx + dx, paddle.w / 2, W - paddle.w / 2);
+  idle();
 }, { passive: true });
 cv.addEventListener('pointerdown', e => {
   audioInit();
   touchMode = e.pointerType !== 'mouse';
   if (!playing()) return;
   usingKeys = false;
-  paddle.tx = toField(e.clientX);
-  if (balls.some(b => b.stuck)) {
-    // on touch, the first tap only moves the paddle when it lands far away, so aiming isn't wasted
-    if (!touchMode || Math.abs(paddle.tx - paddle.x) < paddle.w) launch();
+  if (!touchMode) {
+    paddle.tx = toField(e.clientX);
+    if (balls.some(b => b.stuck)) launch();
+    return;
   }
+  if (drag) return;   // 只认第一根手指
+  paddle.tx = paddle.x;
+  drag = { id: e.pointerId, lastX: e.clientX, x0: e.clientX, y0: e.clientY, t0: performance.now(), moved: false };
+  idle();
 });
+function endDrag(e) {
+  if (!drag || e.pointerId !== drag.id) return;
+  const tap = !drag.moved && performance.now() - drag.t0 < 450;
+  drag = null;
+  if (e.type === 'pointerup' && tap && playing() && balls.some(b => b.stuck)) launch();   // 轻点发球；拖动瞄准后松手不发球
+}
+window.addEventListener('pointerup', endDrag);
+window.addEventListener('pointercancel', endDrag);
 window.addEventListener('keydown', e => {
   keys[e.code] = true;
   if (['ArrowLeft', 'ArrowRight', 'Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();
   if (e.repeat) return;
   audioInit();
+  if (playing()) idle();
   if (e.code === 'KeyM') { toggleMute(); return; }
   if (e.code === 'KeyB') { toggleMusic(); return; }
   if (e.code === 'KeyP' || e.code === 'Escape') { if (state === 'pause') resumeGame(); else pauseGame(); return; }
@@ -2266,6 +2381,18 @@ document.getElementById('homeBtn2').addEventListener('click', goHome);
 document.getElementById('nextBtn').addEventListener('click', () => { audioInit(); nextLevel(); });
 document.getElementById('againBtn').addEventListener('click', () => startGame(level));
 document.getElementById('continueBtn').addEventListener('click', continueHere);
+function syncOpts() {
+  document.querySelectorAll('.opt').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.opt === 'hint' ? aimHint : easyMode)));
+}
+document.querySelectorAll('.opt').forEach(b => b.addEventListener('click', () => {
+  if (b.dataset.opt === 'hint') { aimHint = !aimHint; store.set('aimHint', aimHint); }
+  else {
+    easyMode = !easyMode; store.set('easy', easyMode);
+    if (easyMode && state === 'pause' && pausedFrom === 'serve') shield = Math.max(shield, 1);
+  }
+  syncOpts();
+}));
+syncOpts();
 
 /* ================= boot ================= */
 window.addEventListener('resize', resize);
