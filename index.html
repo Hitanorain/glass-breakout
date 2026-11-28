@@ -152,7 +152,7 @@ h2{margin:0;font-family:var(--display);font-weight:900;font-size:32px;letter-spa
    <div><h3>砖块</h3><ul id="lgBricks"></ul></div>
    <div><h3>道具</h3><ul id="lgPU"></ul></div>
   </div>
-  <p class="keys">电脑：鼠标或 <kbd>←</kbd><kbd>→</kbd> 移动，<kbd>空格</kbd> 或点击发球，<kbd>P</kbd> 暂停，<kbd>B</kbd> 音乐，<kbd>M</kbd> 音效<br>iPad / 手机：手指放在屏幕任意地方左右拖动（不用按在球拍上），轻点发球；几秒不动会自动发球</p>
+  <p class="keys">电脑：鼠标或 <kbd>←</kbd><kbd>→</kbd> 移动，<kbd>空格</kbd> 或点击发球，<kbd>P</kbd> 暂停，<kbd>B</kbd> 音乐，<kbd>M</kbd> 音效<br>iPad / 手机：点哪里球拍就过去，按住左右拖动（手指可以放在球拍上下方，不挡住球拍），轻点发球；几秒不动会自动发球</p>
  </div>
 </div>
 
@@ -2438,9 +2438,11 @@ function buildStylePicker() {
 let touchMode = matchMedia('(pointer: coarse)').matches;
 function toField(clientX) { return (clientX - ox) / scale; }
 function playing() { return state === 'play' || state === 'serve'; }
-// 鼠标：球拍跟着鼠标走。触屏：手指在任意位置左右拖动，球拍按拖动距离跟着走（相对拖动），手指不用按在球拍上挡住视线
-const TOUCH_GAIN = 1.3;
-let drag = null;   // { id, lastX, x0, y0, t0, moved }
+// 鼠标：球拍跟着鼠标走。
+// 触屏：点在球拍外面，球拍先跳到手指那里；点在球拍上或附近，球拍不跳。之后都按拖动距离跟着走，
+// 所以手指可以放在球拍下面或上面拖，不用按在球拍上挡住视线。
+const TOUCH_GAIN = 1;
+let drag = null;   // { id, lastX, x0, y0, t0, moved, jumped }
 window.addEventListener('pointermove', e => {
   if (!playing()) return;
   if (e.pointerType === 'mouse') {
@@ -2465,13 +2467,15 @@ cv.addEventListener('pointerdown', e => {
     return;
   }
   if (drag) return;   // 只认第一根手指
-  paddle.tx = paddle.x;
-  drag = { id: e.pointerId, lastX: e.clientX, x0: e.clientX, y0: e.clientY, t0: performance.now(), moved: false };
+  const fx = toField(e.clientX);
+  const jumped = Math.abs(fx - paddle.x) > paddle.w / 2 + 24;
+  paddle.tx = clamp(jumped ? fx : paddle.x, paddle.w / 2, W - paddle.w / 2);
+  drag = { id: e.pointerId, lastX: e.clientX, x0: e.clientX, y0: e.clientY, t0: performance.now(), moved: false, jumped };
   idle();
 });
 function endDrag(e) {
   if (!drag || e.pointerId !== drag.id) return;
-  const tap = !drag.moved && performance.now() - drag.t0 < 450;
+  const tap = !drag.moved && !drag.jumped && performance.now() - drag.t0 < 450;   // 远处那一下只是把球拍叫过去，不发球
   drag = null;
   if (e.type === 'pointerup' && tap && playing() && balls.some(b => b.stuck)) launch();   // 轻点发球；拖动瞄准后松手不发球
 }
